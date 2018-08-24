@@ -50,7 +50,7 @@ const getAnimation = (min, max) => {
 Using the reanimated macro, the code above can be rewritten this way:
 
 ```js
-import animate from 'reanimated.macro';
+import {exec, animate} from 'reanimated.macro';
 
 const getAnimation = (min, max) => {
   const clock = new Clock();
@@ -67,17 +67,19 @@ const getAnimation = (min, max) => {
     easing: Easing.inOut(Easing.ease),
   };
 
-  return animate(() => {
+  const reset = define() => {
+    state.finished = 0;
+    state.time = 0;
+    state.frameTime = 0;
+  });
+
+  return define(() => {
     if(state.finished && state.position === min) {
-      state.finished = 0;
-      state.time = 0;
-      state.frameTime = 0
+      exec(reset);
       config.toValue = max;
     }
     else if(state.finished && state.position === max) {
-      state.finished = 0;
-      state.time = 0;
-      state.frameTime = 0
+      exec(reset);
       config.toValue = min;
     }
     if(!clockRunning(clock)) {

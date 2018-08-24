@@ -213,6 +213,11 @@ function reanimatedMacro({
 
     UnaryExpression(path) {
       const op = path.node.operator
+      if (op === '-') {
+        path.skip()
+        return
+      }
+
       const opName = unaryOps[op]
       if (!unaryOps[op]) throw new Error(`operator ${op} not supported.`)
       path.replaceWith(
@@ -266,14 +271,11 @@ function reanimatedMacro({
           earlyReturn,
         })
         lambdaBodyPath.pushContainer('body', t.returnStatement(earlyReturn))
+        lambdaPath.traverse(transformOperatorsVisitor, importedIdentifiers)
+        macroCallExpressionPath.replaceWith(
+          t.callExpression(importedIdentifiers.block, [lambdaBodyPath.node]),
+        )
       }
-
-      lambdaPath.traverse(transformOperatorsVisitor, importedIdentifiers)
-      macroCallExpressionPath.replaceWith(
-        t.callExpression(importedIdentifiers.block, [
-          t.arrayExpression([lambdaBodyPath.node]),
-        ]),
-      )
     }
   })
 }
