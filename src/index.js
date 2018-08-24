@@ -46,7 +46,7 @@ const reanimatedImports = [
 ]
 
 function reanimatedMacro({
-  references: {default: defaultImport},
+  references: {define = [], exec = []},
   state,
   babel: {types: t},
 }) {
@@ -156,8 +156,11 @@ function reanimatedMacro({
   const transformOperatorsVisitor = {
     AssignmentExpression(path) {
       const node = path.node
-      if (node.left.type !== 'Identifier')
-        throw new Error('Destructuring is not supported.')
+      if (
+        node.left.type === 'ArrayPattern' ||
+        node.left.type === 'ObjectPattern'
+      )
+        throw new Error('Patterns not supported.')
 
       if (path.parentPath.node.type !== 'ExpressionStatement')
         throw new Error('Assignments must not be used as expressions.')
@@ -233,17 +236,14 @@ function reanimatedMacro({
     },
   }
 
-  defaultImport.forEach(referencePath => {
-    const earlyReturn = referencePath.scope.generateUidIdentifier('earlyReturn')
+  exec.forEach(referencePath => {
+    const macroCallExpressionPath = referencePath.parentPath
+    macroCallExpressionPath.replaceWith(
+      macroCallExpressionPath.node.arguments[0],
+    )
+  })
 
-    referencePath.scope.push({
-      id: earlyReturn,
-      init: t.newExpression(
-        t.memberExpression(t.identifier('Animated'), t.identifier('Value')),
-        [],
-      ),
-    })
-
+  define.forEach(referencePath => {
     const macroCallExpressionPath = referencePath.parentPath
     const lambdaPath = macroCallExpressionPath.get('arguments.0')
     const lambdaBodyPath = lambdaPath.get('body')
@@ -251,6 +251,16 @@ function reanimatedMacro({
     if (lambdaBodyPath) {
       // If it's a lambda block then rewrite the code to allow for side exits
       if (lambdaBodyPath.node.type === 'BlockStatement') {
+        const earlyReturn = referencePath.scope.generateUidIdentifier(
+          'earlyReturn',
+        )
+        lambdaBodyPath.traverse(returnVisitor, {earlyReturn})
+
+        referencePath.scope.push({
+          id: earlyReturn,
+          init: t.newExpression(t.identifier('Value'), []),
+        })
+
         macroCallExpressionPath.traverse(blockVisitor, {
           importedIdentifiers,
           earlyReturn,
@@ -260,7 +270,9 @@ function reanimatedMacro({
 
       lambdaPath.traverse(transformOperatorsVisitor, importedIdentifiers)
       macroCallExpressionPath.replaceWith(
-        t.callExpression(importedIdentifiers.block, [lambdaBodyPath.node]),
+        t.callExpression(importedIdentifiers.block, [
+          t.arrayExpression([lambdaBodyPath.node]),
+        ]),
       )
     }
   })
